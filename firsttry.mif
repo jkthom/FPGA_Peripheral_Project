@@ -1,0 +1,47 @@
+WIDTH=16;
+DEPTH=2048;
+
+ADDRESS_RADIX=HEX;
+DATA_RADIX=HEX;
+
+CONTENT BEGIN
+0000: 8016; --     CALL  WaitAllDown
+0001: 801A; --     CALL  WaitKey1Press
+0002: 801E; --     CALL  WaitKey1Release
+0003: 9000; --     IN    Switches
+0004: 3B00; --     AND   Low10Mask
+0005: 9890; --     OUT   OP_A
+0006: 8016; --     CALL  WaitAllDown
+0007: 801A; --     CALL  WaitKey1Press
+0008: 801E; --     CALL  WaitKey1Release
+0009: 9000; --     IN    Switches
+000A: 3B00; --     AND   Low10Mask
+000B: 9891; --     OUT   OP_B
+000C: 1800; --     LOADI 0
+000D: 9892; --     OUT   CTRL
+000E: 9092; --     IN    CTRL
+000F: 3B01; --     AND   DoneMask        ; test DONE bit (bit7)
+0010: 700E; --     JZERO PollDone
+0011: 9093; --     IN    RES_LO
+0012: 9804; --     OUT   Hex0
+0013: 9094; --     IN    RES_HI
+0014: 9805; --     OUT   Hex1
+0015: 5800; --     JUMP  Main            ; repeat forever
+0016: 9000; --     IN    Switches
+0017: 3B00; --     AND   Low10Mask
+0018: 7816; --     JNZ   WaitAllDown
+0019: 8800; --     RETURN
+001A: 9096; --     IN    Key1
+001B: 3B02; --     AND   Key1Mask
+001C: 781A; --     JNZ   WaitKey1Press   ; keep waiting while not pressed (bit=1)
+001D: 8800; --     RETURN
+001E: 9096; --     IN    Key1
+001F: 3B02; --     AND   Key1Mask
+0020: 701E; --     JZERO WaitKey1Release ; keep waiting while pressed (bit=0)
+0021: 8800; --     RETURN
+[0022..02FF] : 0000; -- [empty memory]
+0300: 03FF; -- Low10Mask: DW &H03FF      ; mask to keep SW[9:0]
+0301: 0080; -- DoneMask:  DW &H0080      ; CTRL bit7 = DONE
+0302: 0001; -- Key1Mask:  DW &H0001      ; KEY1 bit0
+[0303..07FF] : 0000; -- [empty memory]
+END;

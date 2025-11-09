@@ -1,0 +1,115 @@
+WIDTH=16;
+DEPTH=2048;
+
+ADDRESS_RADIX=HEX;
+DATA_RADIX=HEX;
+
+CONTENT BEGIN
+0000: 0867; --             LOAD  Zero
+0001: 105B; --             STORE Score
+0002: 9805; --             OUT   Hex1            ; show 0 on score display
+0003: 9000; --             IN    Switches
+0004: 9801; --             OUT   LEDs
+0005: 105D; --             STORE Sw
+0006: 085B; --             LOAD  Score
+0007: 3864; --             AND   ScoreMask8
+0008: 9805; --             OUT   Hex1
+0009: 085D; --             LOAD  Sw
+000A: 7803; --             JNZ   WaitForAllDown   ; Not zero = still waiting for all down
+000B: 085C; --             LOAD  Random
+000C: 105E; --             STORE value
+000D: 803F; --             CALL  SubRoutine
+000E: 3863; --             AND   TenBitMask       ; Keep low 10 bits
+000F: 105C; --             STORE Random
+0010: 9000; --             IN    Switches
+0011: 9801; --             OUT   LEDs
+0012: 105D; --             STORE Sw
+0013: 085B; --             LOAD  Score
+0014: 3864; --             AND   ScoreMask8
+0015: 9805; --             OUT   Hex1
+0016: 085D; --             LOAD  Sw
+0017: 680B; --             JPOS  SpinRandomWhileDown  ; If any switch up, keep spinning
+0018: 085C; --             LOAD  Random
+0019: 9804; --             OUT   Hex0
+001A: 0868; --             LOAD  One
+001B: 9802; --             OUT   Timer
+001C: 9000; --             IN    Switches
+001D: 9801; --             OUT   LEDs
+001E: 105D; --             STORE Sw
+001F: 085D; --             LOAD  Sw
+0020: 3863; --             AND   TenBitMask
+0021: 285C; --             SUB   Random
+0022: 7030; --             JZERO PlayerWon        ; exact match - they won!
+0023: 9002; --             IN    Timer
+0024: 2869; --             SUB   Fifty            ; Check if >= 50 ticks (5 seconds)
+0025: 601C; --             JNEG  RoundLoop        ; < 50 ticks - keep waiting
+0026: 085C; --             LOAD  Random
+0027: 105E; --             STORE value
+0028: 803F; --             CALL  SubRoutine
+0029: 3863; --             AND   TenBitMask
+002A: 105C; --             STORE Random
+002B: 085C; --             LOAD  Random
+002C: 9804; --             OUT   Hex0
+002D: 0868; --             LOAD  One
+002E: 9802; --             OUT   Timer
+002F: 581C; --             JUMP  RoundLoop
+0030: 085B; --             LOAD  Score
+0031: 3001; --             ADDI  1
+0032: 105B; --             STORE Score
+0033: 3864; --             AND   ScoreMask8
+0034: 9805; --             OUT   Hex1
+0035: 085C; --             LOAD  Random
+0036: 105E; --             STORE value
+0037: 803F; --             CALL  SubRoutine
+0038: 3863; --             AND   TenBitMask
+0039: 105C; --             STORE Random
+003A: 085C; --             LOAD  Random
+003B: 9804; --             OUT   Hex0
+003C: 0868; --             LOAD  One
+003D: 9802; --             OUT   Timer
+003E: 581C; --             JUMP  RoundLoop
+003F: 085E; --             LOAD  value
+0040: 5001; --             SHIFT 1
+0041: 105F; --             STORE shifted
+0042: 085F; --             LOAD  shifted
+0043: 1060; --             STORE tmpval5
+0044: 085F; --             LOAD  shifted
+0045: 1061; --             STORE tmpval9
+0046: 8051; --             CALL  ExtractBit5
+0047: 8056; --             CALL  ExtractBit9
+0048: 0860; --             LOAD  tmpval5
+0049: 4861; --             XOR   tmpval9
+004A: 1062; --             STORE xresult
+004B: 085F; --             LOAD  shifted
+004C: 3865; --             AND   maskto             ; Clear bit 0
+004D: 4062; --             OR    xresult            ; Set bit 0 to XOR result
+004E: 105E; --             STORE value              ; Save result and leave in AC
+004F: 085E; --             LOAD  value
+0050: 8800; --             RETURN
+0051: 0860; --             LOAD  tmpval5
+0052: 5015; --             SHIFT -5
+0053: 3866; --             AND   mask
+0054: 1060; --             STORE tmpval5
+0055: 8800; --             RETURN
+0056: 0861; --             LOAD  tmpval9
+0057: 5019; --             SHIFT -9
+0058: 3866; --             AND   mask
+0059: 1061; --             STORE tmpval9
+005A: 8800; --             RETURN
+005B: 0000; -- Score:      DW    0
+005C: 5A5A; -- Random:     DW    &H5A5A       ; Initial non-zero seed
+005D: 0000; -- Sw:         DW    0
+005E: 0000; -- value:      DW    0
+005F: 0000; -- shifted:    DW    0
+0060: 0000; -- tmpval5:    DW    0
+0061: 0000; -- tmpval9:    DW    0
+0062: 0000; -- xresult:    DW    0
+0063: 03FF; -- TenBitMask: DW    &H03FF       ; Keep low 10 bits
+0064: 00FF; -- ScoreMask8: DW    &H00FF       ; Show low 8 bits on Hex1
+0065: FFFE; -- maskto:     DW    &HFFFE       ; Clear bit 0
+0066: 0001; -- mask:       DW    &H0001       ; Isolate bit 0
+0067: 0000; -- Zero:       DW    0
+0068: 0001; -- One:        DW    1
+0069: 0064; -- Fifty:      DW    100
+[006A..07FF] : 0000; -- [empty memory]
+END;

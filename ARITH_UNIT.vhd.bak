@@ -1,0 +1,165 @@
+
+
+
+library ieee, altera_mf, lpm;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use altera_mf.altera_mf_components.all;
+use lpm.lpm_components.all;
+
+-- =============================================================
+-- ARITH_UNIT: SCOMP Math Peripheral (Multiply / Divide, no remainder)
+--
+-- I/O Address Map (11-bit):
+--   0x90 : OPERAND_A (W)
+--   0x91 : OPERAND_B (W)
+--   0x92 : CTRL_STATUS (R/W)
+--          - WRITE bit0: 0=multiply, 1=divide (triggers operation)
+--          - READ  bits: [7]=DONE, [6]=BUSY, [5]=DIV_BY_ZERO, [1:0]={0,op_div}
+--   0x93 : RES_LO (R)  - product low / quotient
+--   0x94 : RES_HI (R)  - product high (0 on divide)
+--
+-- Notes:
+--   * Uses only ieee.numeric_std (no conflicting packages)
+--   * Performs unsigned arithmetic
+--   * Single-cycle compute on control write
+-- =============================================================
+
+entity ARITH_UNIT is
+  port (
+    CLOCK    : in  std_logic;
+    RESETN   : in  std_logic;
+
+    IO_ADDR  : in  std_logic_vector(10 downto 0);
+    IO_DATA  : inout std_logic_vector(15 downto 0);
+    IO_READ  : in  std_logic;
+    IO_WRITE : in  std_logic
+  );
+end ARITH_UNIT;
+
+architecture rtl of ARITH_UNIT is
+
+  -- Address constants (11-bit)
+  constant A_ADDR     : std_logic_vector(10 downto 0) := std_logic_vector(to_unsigned(16#090#, 11)); -- 0x90
+  constant B_ADDR     : std_logic_vector(10 downto 0) := std_logic_vector(to_unsigned(16#091#, 11)); -- 0x91
+  constant CTRL_ADDR  : std_logic_vector(10 downto 0) := std_logic_vector(to_unsigned(16#092#, 11)); -- 0x92
+  constant RESLO_ADDR : std_logic_vector(10 downto 0) := std_logic_vector(to_unsigned(16#093#, 11)); -- 0x93
+  constant RESHI_ADDR : std_logic_vector(10 downto 0) := std_logic_vector(to_unsigned(16#094#, 11)); -- 0x94
+
+  -- Operand / Result registers
+  signal a_reg, b_reg   : std_logic_vector(15 downto 0) := (others => '0');
+  signal res_lo, res_hi : std_logic_vector(15 downto 0) := (others => '0');
+
+  -- Control / Status
+  signal op_div         : std_logic := '0';  -- 0=mul, 1=div
+  signal busy           : std_logic := '0';
+  signal done           : std_logic := '0';
+  signal div_by_zero    : std_logic := '0';
+
+  -- Readback mux & tri-state enable
+  signal read_data      : std_logic_vector(15 downto 0);
+  signal drive_en       : std_logic;
+
+begin
+
+  ----------------------------------------------------------------
+  -- Write side: capture A/B; CTRL write triggers operation
+  ----------------------------------------------------------------
+  process (CLOCK, RESETN)
+    variable prod32 : unsigned(31 downto 0);
+    variable quot16 : unsigned(15 downto 0);
+  begin
+    if RESETN = '0' then
+      a_reg       <= (others => '0');
+      b_reg       <= (others => '0');
+      res_lo      <= (others => '0');
+      res_hi      <= (others => '0');
+      op_div      <= '0';
+      busy        <= '0';
+      done        <= '0';
+      div_by_zero <= '0';
+
+    elsif rising_edge(CLOCK) then
+      done <= '0'; -- Clear DONE each clock (re-set later)
+
+      if IO_WRITE = '1' then
+        if IO_ADDR = A_ADDR then
+          a_reg <= IO_DATA;
+
+        elsif IO_ADDR = B_ADDR then
+          b_reg <= IO_DATA;
+
+        elsif IO_ADDR = CTRL_ADDR then
+          ------------------------------------------------------
+          -- Control register write: start operation
+          ------------------------------------------------------
+          op_div      <= IO_DATA(0);
+          busy        <= '1';
+          div_by_zero <= '0';
+
+          if IO_DATA(0) = '0' then
+            ------------------------------------------------------
+            -- Multiply: unsigned 16×16 → 32 bits
+            ------------------------------------------------------
+            prod32 := unsigned(a_reg) * unsigned(b_reg);
+            res_lo <= std_logic_vector(prod32(15 downto 0));
+            res_hi <= std_logic_vector(prod32(31 downto 16));
+            busy   <= '0';
+            done   <= '1';
+
+          else
+            ------------------------------------------------------
+            -- Divide: unsigned 16÷16 → 16-bit quotient
+            ------------------------------------------------------
+            if b_reg = x"0000" then
+              res_lo      <= (others => '0');
+              res_hi      <= (others => '0');
+              div_by_zero <= '1';
+              busy        <= '0';
+              done        <= '1';
+            else
+              quot16 := unsigned(a_reg) / unsigned(b_reg);
+              res_lo <= std_logic_vector(quot16);
+              res_hi <= (others => '0');
+              busy   <= '0';
+              done   <= '1';
+            end if;
+          end if;
+        end if;
+      end if;
+    end if;
+  end process;
+
+  ----------------------------------------------------------------
+  -- Readback mux (status + result registers)
+  ----------------------------------------------------------------
+  with IO_ADDR select
+    read_data <=
+      a_reg                                                    when A_ADDR,
+      b_reg                                                    when B_ADDR,
+      ("000000" & div_by_zero & busy & done & "00" & op_div)   when CTRL_ADDR,
+      res_lo                                                   when RESLO_ADDR,
+      res_hi                                                   when RESHI_ADDR,
+      (others => '0')                                          when others;
+
+  ----------------------------------------------------------------
+  -- Tri-state output for shared IO_DATA bus
+  ----------------------------------------------------------------
+  drive_en <= '1' when (IO_READ = '1') and
+                      (IO_ADDR = A_ADDR or IO_ADDR = B_ADDR or
+                       IO_ADDR = CTRL_ADDR or IO_ADDR = RESLO_ADDR or IO_ADDR = RESHI_ADDR)
+             else '0';
+
+  bus_drv: lpm_bustri
+    generic map (lpm_width => 16)
+    port map (
+      data     => read_data,
+      enabledt => drive_en,
+      tridata  => IO_DATA
+    );
+
+end rtl;
+
+
+
+

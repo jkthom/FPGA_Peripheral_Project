@@ -1,0 +1,37 @@
+library ieee, lpm;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;          -- for to_unsigned
+use lpm.lpm_components.all;        -- for lpm_bustri
+
+entity KEY1_PERIPH is
+  port(
+    CLOCK    : in  std_logic;                          -- (unused in minimal)
+    RESETN   : in  std_logic;                          -- (unused in minimal)
+    KEY1_N   : in  std_logic;                          -- active-low button
+    IO_ADDR  : in  std_logic_vector(10 downto 0);
+    IO_READ  : in  std_logic;
+    IO_WRITE : in  std_logic;                          -- (unused)
+    IO_DATA  : inout std_logic_vector(15 downto 0)
+  );
+end KEY1_PERIPH;
+
+architecture rtl of KEY1_PERIPH is
+  constant KEY1_ADDR : std_logic_vector(10 downto 0)
+    := std_logic_vector(to_unsigned(16#096#, 11));     -- choose 0x96
+  signal dout : std_logic_vector(15 downto 0);
+  signal en   : std_logic;
+begin
+  -- Drive bit0 = 1 when the button is pressed
+  dout <= (15 downto 1 => '0') & (not KEY1_N);
+
+  -- Only drive the IO bus when SCOMP is doing IN &H096
+  en   <= '1' when (IO_READ = '1' and IO_ADDR = KEY1_ADDR) else '0';
+
+  bus: lpm_bustri
+    generic map (lpm_width => 16)
+    port map (
+      data     => dout,
+      enabledt => en,
+      tridata  => IO_DATA
+    );
+end rtl;
